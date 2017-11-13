@@ -292,6 +292,18 @@ class Hesperides implements Serializable {
         }
 
         def moduleNames = propertyUpdates.keySet() as List
+        // retrait des path sur lesquels on a fait une modif polymorphique
+        def modulePropertiesPathToExclude = []
+        for (int i = 0; i < moduleNames.size(); i++) {
+            def moduleName = moduleNames[i]
+            if (moduleName.startsWith("path:")) {
+                def moduleNameFromPath = moduleName.split("#").last()
+                def path = moduleName.minus("path:").minus("#"+moduleNameFromPath)
+                def moduleFoundFromPath = selectModule(modules: platformInfo.modules, path: path, moduleName: moduleNameFromPath)
+                modulePropertiesPathToExclude << moduleFoundFromPath.properties_path
+            }
+        }
+
         for (int i = 0; i < moduleNames.size(); i++) {  // DAMN Jenkins pipelines that does not support .each
             def moduleName = moduleNames[i]
             def modulePropertyChanges = propertyUpdates[moduleName]
@@ -303,12 +315,14 @@ class Hesperides implements Serializable {
                 def path = moduleName.minus("path:").minus("#"+moduleNameFromPath)
                 def moduleFoundFromPath = selectModule(modules: platformInfo.modules, path: path, moduleName: moduleNameFromPath)
                 log "-> properties_path: $moduleFoundFromPath.properties_path"
-                for (int j = 0; j < moduleFoundFromPath.instances.size(); j++){
-                    def instance = moduleFoundFromPath.instances[j].name
-                    def instanceInfo = extractInstanceInfo(module: moduleFoundFromPath,
-                                                           instance: instance)
-                    applyChanges(modulePropertyChanges, instanceInfo.key_values, "[instance=$instance] ")
-                }
+                def modulePlatformProperties = getModulePropertiesForPlatform(app: args.app,
+                        platform: args.platform,
+                        modulePropertiesPath: moduleFoundFromPath.properties_path)
+                applyChanges(modulePropertyChanges, modulePlatformProperties.key_value_properties)
+                setPlatformProperties(platformInfo: platformInfo,
+                        modulePropertiesPath: moduleFoundFromPath.properties_path,
+                        properties: modulePlatformProperties,
+                        commitMsg: args.commitMsg)
                 updatePlatform(platformInfo: platformInfo)
             } else if (moduleName.contains('#')) { // il s'agit de properties d'instance
                 def splittedMod = moduleName.split('#')  // DAMN Jenkins pipelines that does not support tuples
@@ -330,6 +344,8 @@ class Hesperides implements Serializable {
                     for (int j = 0; j < modules.size(); j++) {
                         modulePropertiesPath << modules[j].properties_path
                     }
+                    // exclusion des polymorphismes
+                    modulePropertiesPath.removeAll(modulePropertiesPathToExclude)
                 }
                 for (int p = 0; p < modulePropertiesPath.size(); p++){
                     log('-> properties_path: ' + modulePropertiesPath[p])

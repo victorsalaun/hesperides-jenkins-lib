@@ -208,19 +208,21 @@ class Hesperides implements Serializable {
         modules.collect { it.id.toInteger() }.max()
     }
 
-    def setPlatformModuleVersion(Map args) { required(args, ['app', 'platform', 'moduleName', 'newVersion']) // optional: checkCurrentVersion, isWorkingcopy
+    def setPlatformModuleVersion(Map args) { required(args, ['app', 'platform', 'moduleName', 'newVersion']) // optional: checkCurrentVersion, isWorkingcopy, multiple
         def platformInfo = getPlatformInfo(args)
-        def module = selectModule(modules: platformInfo.modules, moduleName: args.moduleName)
-        if (args.checkCurrentVersion) {
-            if (module.version != args.checkCurrentVersion) {
-                throw new ExpectedEnvironmentException("Actual module $module.name version ${module.version} does not match expect version $args.currentVersion")
+        def modules = selectModule(modules: platformInfo.modules, moduleName: args.moduleName, multiple: args.multiple)
+        for (module in modules) {
+            if (args.checkCurrentVersion) {
+                if (module.version != args.checkCurrentVersion) {
+                    throw new ExpectedEnvironmentException("Actual module $module.name version ${module.version} does not match expect version $args.currentVersion")
+                }
             }
+            module.version = args.newVersion
+            if (args.isWorkingcopy != null) {
+                module.working_copy = args.isWorkingcopy
+            }
+            updatePlatform(platformInfo: platformInfo, copyPropertiesForUpgradedModules: true)
         }
-        module.version = args.newVersion
-        if (args.isWorkingcopy != null) {
-            module.working_copy = args.isWorkingcopy
-        }
-        updatePlatform(platformInfo: platformInfo, copyPropertiesForUpgradedModules: true)
     }
 
     def setPlatformModulesVersion(Map args) { required(args, ['app', 'platform', 'newVersion']) // optional: checkCurrentVersion, isWorkingcopy
@@ -670,7 +672,7 @@ class Hesperides implements Serializable {
         matchingModules
     }
 
-    protected selectModule(Map args) { required(args, ['modules', 'moduleName']) // optional: instance, path
+    protected selectModule(Map args) { required(args, ['modules', 'moduleName']) // optional: instance, path, multiple
         def matchingModules = selectModules(args)
         if (args.instance) {
             def filteredModules = []
@@ -682,11 +684,15 @@ class Hesperides implements Serializable {
             }
             matchingModules = filteredModules
         }
-        if (matchingModules.size() > 1) {
-            def modulesString = modulesStringDescription(matchingModules)
-            throw new ExpectedEnvironmentException("Multiple matching modules found in platform for name ${args.moduleName}" + (args.path ? "and properties_path ${args.path}" : '') + " : ${modulesString}")
+        if (args.multiple) {
+            matchingModules
+        } else {
+            if (matchingModules.size() > 1) {
+                def modulesString = modulesStringDescription(matchingModules)
+                throw new ExpectedEnvironmentException("Multiple matching modules found in platform for name ${args.moduleName}" + (args.path ? "and properties_path ${args.path}" : '') + " : ${modulesString}")
+            }
+            matchingModules[0]
         }
-        matchingModules[0]
     }
 
 

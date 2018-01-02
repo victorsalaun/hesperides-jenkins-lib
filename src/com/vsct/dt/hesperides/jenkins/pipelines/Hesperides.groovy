@@ -208,9 +208,9 @@ class Hesperides implements Serializable {
         modules.collect { it.id.toInteger() }.max()
     }
 
-    def setPlatformModuleVersion(Map args) { required(args, ['app', 'platform', 'moduleName', 'newVersion']) // optional: checkCurrentVersion, isWorkingcopy, multiple
+    def setPlatformModuleVersion(Map args) { required(args, ['app', 'platform', 'moduleName', 'newVersion']) // optional: checkCurrentVersion, isWorkingcopy, path
         def platformInfo = getPlatformInfo(args)
-        def modules = selectModule(modules: platformInfo.modules, moduleName: args.moduleName, multiple: args.multiple)
+        def modules = selectModules(modules: platformInfo.modules, moduleName: args.moduleName, path: args.path ?: null)
         for (module in modules) {
             if (args.checkCurrentVersion) {
                 if (module.version != args.checkCurrentVersion) {
@@ -250,7 +250,7 @@ class Hesperides implements Serializable {
             true
         } catch (HttpException httpException) {
             if (httpException.statusCode != 404) {
-                throw ex
+                throw httpException
             }
             false
         }
@@ -262,7 +262,7 @@ class Hesperides implements Serializable {
             true
         } catch (HttpException httpException) {
             if (httpException.statusCode != 404) {
-                throw ex
+                throw httpException
             }
             false
         }
@@ -672,7 +672,7 @@ class Hesperides implements Serializable {
         matchingModules
     }
 
-    protected selectModule(Map args) { required(args, ['modules', 'moduleName']) // optional: instance, path, multiple
+    protected selectModule(Map args) { required(args, ['modules', 'moduleName']) // optional: instance
         def matchingModules = selectModules(args)
         if (args.instance) {
             def filteredModules = []
@@ -684,15 +684,11 @@ class Hesperides implements Serializable {
             }
             matchingModules = filteredModules
         }
-        if (args.multiple) {
-            matchingModules
-        } else {
-            if (matchingModules.size() > 1) {
-                def modulesString = modulesStringDescription(matchingModules)
-                throw new ExpectedEnvironmentException("Multiple matching modules found in platform for name ${args.moduleName}" + (args.path ? "and properties_path ${args.path}" : '') + " : ${modulesString}")
-            }
-            matchingModules[0]
+        if (matchingModules.size() > 1) {
+            def modulesString = modulesStringDescription(matchingModules)
+            throw new ExpectedEnvironmentException("Multiple matching modules found in platform for name ${args.moduleName}" + (args.path ? "and properties_path ${args.path}" : '') + " : ${modulesString}")
         }
+        matchingModules[0]
     }
 
 
